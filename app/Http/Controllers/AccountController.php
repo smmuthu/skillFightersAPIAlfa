@@ -27,15 +27,20 @@ use Illuminate\Support\Facades\File;
 use Session;
 
 class AccountController extends Controller
-{
+{   
+
+    public function __construct()
+    {
+        //$this->middleware('jwt.auth', ['except' => ['resetpassword']]);
+    }
     /**
      * Display a listing of the resource.
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
-    {
-        //
+    public function index() {
+        
+        return response()->json(['status_code' => 200, 'message' => '', 'error' => false, 'users' => User::all()], 200);
     }
 
     /**
@@ -54,11 +59,9 @@ class AccountController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
-    {
+    public function store(Request $request) {
+        
         $data = $request->all();
-        //echo "<pre>";print_r($request->file('image'));exit;
-        //echo "<pre>";print_r($data);exit;
         $rules = [
             'firstname' => 'required|regex:/^[A-Za-z. -]+$/',
             'lastname' => 'required|regex:/^[A-Za-z. -]+$/',
@@ -72,25 +75,27 @@ class AccountController extends Controller
         $validator = Validator::make($data,$rules);
         if ($validator->fails()) {
             $messages = $validator->errors()->all();            
-            return response()->json(['status_code'=>404,'message'=>'Invalid.','error'=>true,'validation'=>$messages],404);
-        }
-        else{
+            return response()->json(['status_code' => 200, 'message' => $messages, 'error' => true], 200);
+        } else {
             $data['password'] = Hash::make($request->input('password'));
             $user = User::create($data);
+            //upload image
             if($request->file('image')) {
                 $image_name = $request->file('image')->getClientOriginalName();
                 $image_extension = $request->file('image')->getClientOriginalExtension();
                 $request->file('image')->move(base_path(). '/public/images/user/'.$user->id, strtolower($image_name));
                 $user->image = $image_name;    
+                $user->save();
             }
-            $user->save();
+
+            // send mail notification
             $name = array('name'=>$request->input('firstname'));
             $email = $request->input('email');
             Mail::send('user.mail.welcome', $name, function($message) use ($user) {
                 $message->to($user->email, 'Skill Fighters')
                         ->subject('Confirmation Mail');
             });
-            return response()->json(['status_code'=>200,'message'=>'User has been created.','error'=>false,'user'=>$user],200);   
+            return response()->json(['status_code' => 200, 'message' => 'User has been created.', 'error' => false, 'user' => $user], 200);   
         }
     }
 
@@ -100,9 +105,13 @@ class AccountController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
-    {
-        //
+    public function show($id) {
+        try {
+            $user = User::findOrFail($id);
+            return response()->json(['status_code' => 200, 'error' => false, 'user' => $user], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['status_code' => 200, 'error' => true, 'message' => 'User not found.'], 200);
+        }
     }
 
     /**
@@ -123,9 +132,21 @@ class AccountController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
-    {
-        //
+    public function update(Request $request, $id) {
+        try {
+            $user = User::findOrFail($id);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['status_code' => 200, 'error' => true, 'message' => 'User not found.'], 200);
+        }
+
+        $user->update($request->all());
+        
+        if ($request->input('password')) {
+            $password = Hash::make($request->input('password'));
+            $user->update(array('password'=>$password));
+        }
+
+        return response()->json(['status_code' => 200, 'error' => false, 'message' => 'User data has been updated successfully.', 'user' => $user], 200);
     }
 
     /**
@@ -134,18 +155,26 @@ class AccountController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
-    {
-        //
-    }
-    public function resetpassword(Request $request)
-    {        
+    public function destroy($id) {
         try {
-            $users = User::where('email', '=' ,$request->input('email'));
-            $user = $users->first();           
+            $user = User::findOrFail($id);            
         } catch (ModelNotFoundException $e) {
-            return response()->json(['status_code'=>404,'error'=>true,'message'=>'User not found.'],404);
+            return response()->json(['status_code' => 200, 'error' => true, 'message' => 'User not found.'], 200);
         }
+        if($user->id){
+            $user->delete();
+            return response()->json(['status_code' => 200, 'error' => false, 'message' => 'User has been deleted.'], 200);
+        }
+    }
+
+    public function resetpassword(Request $request) {        
+        
+        try {
+            $user = User::where('email', $request->input('email'))->firstOrFail();
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['status_code'=>200,'error'=>true,'message'=>'The given mail address did not matched with any records.'],200);
+        }
+
         if($user->email){
             $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';
             $pass = array(); //remember to declare $pass as an array
@@ -155,12 +184,13 @@ class AccountController extends Controller
                 $pass[] = $alphabet[$n];
             }
             $password = implode($pass);
-            $user_details = array('name'=>$user->firstname,'password'=>$password);
+            $user_details = array('name' => $user->firstname, 'password' => $password);
             Mail::send('user.mail.resetpassword',  $user_details, function($message) use ($user){
                 $message->to($user->email, 'Skill Fighters')
-                        ->subject('Reset Password');
-            }); 
-            return response()->json(['status_code'=>200,'error'=>false,'message'=>'User found.','password'=>implode($pass)],200);
+                        ->subject('We have reset your password..');
+            });
+            $user->update(array('password' => Hash::make($password)));
+            return response()->json(['status_code'=>200,'error'=>false,'message'=>'We have sent the mail to you with your new password..','password'=>$password],200);
         }
     }
 }
