@@ -16,7 +16,7 @@ Route::group(['prefix' => 'api/v1'], function()
 {
 	
 	Route::post('authenticate', 'AuthenticateController@authenticate');
-	Route::get('authenticate/user', 'AuthenticateController@getAuthenticatedUser');
+	Route::get('authenticate', 'AuthenticateController@getAuthenticatedUser');
     Route::resource('user', 'AccountController');
     Route::post('user/resetpassword', 'AccountController@resetpassword');
 });
