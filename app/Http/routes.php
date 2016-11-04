@@ -11,17 +11,12 @@
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
+//Route::group(['prefix' => 'api/v1', 'middleware' => ['jwt.auth']], function()
 Route::group(['prefix' => 'api/v1'], function()
 {
-	Route::resource('authenticate', 'AuthenticateController');
-    Route::post('authenticate', 'AuthenticateController@authenticate');
-});
-
-Route::group(array('prefix' => 'api/v1', 'before' => 'jwt.auth'), function()
-{
+	
+	Route::post('authenticate', 'AuthenticateController@authenticate');
+	Route::get('authenticate/user', 'AuthenticateController@getAuthenticatedUser');
     Route::resource('user', 'AccountController');
     Route::post('user/resetpassword', 'AccountController@resetpassword');
 });

@@ -31,7 +31,7 @@ class AccountController extends Controller
 
     public function __construct()
     {
-        //$this->middleware('jwt.auth', ['except' => ['resetpassword']]);
+        $this->middleware('jwt.auth', ['except' => ['resetpassword', 'store']]);
     }
     /**
      * Display a listing of the resource.
