@@ -138,13 +138,25 @@ class AccountController extends Controller
         } catch (ModelNotFoundException $e) {
             return response()->json(['status_code' => 200, 'error' => true, 'message' => 'User not found.'], 200);
         }
+        $_data = $request->all();
+        if($_data['newimage']){
+            list($type, $data) = explode(';', $request->input('newimage'));
+            list(, $data) = explode(',', $data);
+            list(, $ext) = explode('/', $type);
+            $data = base64_decode($data);
+            $filepath = 'user/'.$user->id.'/avatar.'.$ext;
+            Storage::disk('local')->put($filepath, $data);
+            $_data['image']=$filepath;
 
-        $user->update($request->all());
-        
+        } 
         if ($request->input('password')) {
             $password = Hash::make($request->input('password'));
-            $user->update(array('password'=>$password));
+            $_data['password']=$password;
         }
+        unset($_data['newimage']);
+        unset($_data['id']);
+        unset($_data['updated_at']);
+        $user->update($_data);
 
         return response()->json(['status_code' => 200, 'error' => false, 'message' => 'User data has been updated successfully.', 'user' => $user], 200);
     }
